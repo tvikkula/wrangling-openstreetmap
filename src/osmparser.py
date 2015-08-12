@@ -3,6 +3,7 @@ import pprint
 import json
 import re
 import codecs
+
 DATA = "../data/hesa.osm"
 # Regex's for problematic tags:
 lower = re.compile(r'^([a-z]|_)*$')
@@ -29,11 +30,21 @@ def shape_element(element):
         for tag in element.findall("tag"):
             tagkey = tag.attrib["k"]
             tagval = tag.attrib["v"]
-            if tagkey.startswith("addr:"):
+            # Handle postal codes:
+            if tagkey == "postal_code":
+                node[tagkey] = tagval[:5]
+            # Handle addresses
+            elif tagkey.startswith("addr:"):
                 if not "address" in node:
                     node["address"] = {}
-                node["address"][tagkey.replace("addr:", "")] = \
-                tagval
+                node["address"][tagkey.replace("addr:", "")] = tagval
+            # Handle phonenumbers
+            elif tagkey == "phone" or tagkey == "contact:phone":
+                tagval = re.sub('[-() ]|;.*$', '', tagval)
+                if not tagval.startswith('+358'):
+                    tagval = '+358' + tagval[1:]
+
+                node["phone"] = tagval
             else:
                 node[tagkey] = tagval
         for tag in element.findall("nd"):
@@ -50,8 +61,11 @@ def process_map(file_in, pretty = False):
     file_out = "{0}.json".format(file_in)
     meta_file_out = "{0}_metadata.json".format(file_in)
     summarydata = {}
+    summarydata["_id"] = "tags"
     users = {}
+    users["_id"] = "users"
     errors = {}
+    errors["_id"] = "errors"
     with codecs.open(file_out, "w") as fo:
         for _, element in ET.iterparse(file_in):
             if errorintagkeys(element, errors):
@@ -82,7 +96,6 @@ def summary(tag, summary):
     Returns:
         void
     """
-    summary["_id"] = "tags"
     if (tag in summary):
         summary[tag] = summary[tag] + 1
     else:
@@ -102,11 +115,9 @@ def errorintagkeys(elem, keys):
        boolean: A boolean-value indicating whether the tag-key contained
        an error or not.
     """
-    keys["_id"] = "errors"
     error = False
     if elem.tag == "tag":
         if problemchars.match(elem.attrib['k']):
-            print "problemchars found!"
             if ("problemchars" in keys):
                 keys["problemchars"] = keys["problemchars"] + 1
             else:
@@ -148,7 +159,6 @@ def checkusercontribs(elem, users):
     Returns:
         void
     """
-    users["_id"] = "users"
     if elem.tag in ("node", "way", "relation"):
         if (elem.attrib["user"] in users):
             users[elem.attrib["user"]] = \
