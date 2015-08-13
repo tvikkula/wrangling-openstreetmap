@@ -80,7 +80,6 @@ def process_map(file_in, pretty = False):
                     fo.write(json.dumps(el) + "\n")
     with codecs.open(meta_file_out, "w") as fo:
         fo.write(json.dumps(summarydata) + "\n")
-        fo.write(json.dumps(users) + "\n")
         fo.write(json.dumps(errors) + "\n")
     return summarydata, users, errors
 
