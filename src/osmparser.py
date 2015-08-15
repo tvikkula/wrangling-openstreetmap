@@ -11,22 +11,35 @@ lower_colon = re.compile(r'^([a-z]|_)*:([a-z]|_)*$')
 problemchars = re.compile(r'[=\+/&<>;\'"\?%#$@\,\. \t\r\n]')
 
 def shape_element(element):
+    """
+    Shapes a single xml-element into a node-dictionary if the elements
+    tag is a "node" or a "way". Otherwise returns None.
+
+    Args:
+        element: The xml-element that is to be processed.
+
+    Returns:
+        node (dictionary)
+    """
     CREATED = [ "version", "changeset", "timestamp", "user", "uid"]
     node = {}
     node["pos"] = []
     if element.tag == "node" or element.tag == "way":
         node["type"] = element.tag
         for key, value in element.attrib.iteritems():
+            # If key is in CREATED, add it to created-dict:
             if key in CREATED:
                 if not "created" in node:
                     node["created"] = {}
                 node["created"][key] = value
+            # Add lat&lon to pos:
             elif key == "lon":
                 node["pos"].append(float(value))
             elif key == "lat":
                 node["pos"].insert(0, float(value))
             else:
                 node[key] = value
+        # Handle tags in the osm-element:
         for tag in element.findall("tag"):
             tagkey = tag.attrib["k"]
             tagval = tag.attrib["v"]
@@ -47,6 +60,7 @@ def shape_element(element):
                 node["phone"] = tagval
             else:
                 node[tagkey] = tagval
+        # Handle nds in the osm-element:
         for tag in element.findall("nd"):
             if not "node_refs" in node:
                 node["node_refs"] = []
@@ -58,8 +72,23 @@ def shape_element(element):
 
 # Courtesy of Udacity:
 def process_map(file_in, pretty = False):
+    """
+    Process an osm-file given as input. Writes the osm-file to the disk
+    as a json-file named file_in + ".json". Also produces to a separate 
+    file with metadata from the dataloading process, including tag-dis-
+    tributions and error-counts.
+    
+    Args:
+        file_in: The input osm-file
+        pretty: A flag determining whether the json-file will be intended
+        (with 2 spaces) or not.
+    Returns:
+        void
+    """
+    # Init output files:
     file_out = "{0}.json".format(file_in)
     meta_file_out = "{0}_metadata.json".format(file_in)
+    # Init metadata-dictionaries:
     summarydata = {}
     summarydata["_id"] = "tags"
     users = {}
@@ -68,19 +97,23 @@ def process_map(file_in, pretty = False):
     errors["_id"] = "errors"
     with codecs.open(file_out, "w") as fo:
         for _, element in ET.iterparse(file_in):
+            # Pass if tag key is invalid:
             if errorintagkeys(element, errors):
                 pass
             summary(element.tag, summarydata)
             checkusercontribs(element, users)
             el = shape_element(element)
+            # Write new el to the output-json:
             if el:
                 if pretty:
                     fo.write(json.dumps(el, indent=2)+"\n")
                 else:
                     fo.write(json.dumps(el) + "\n")
+    # Write metadata-dictionaries to metadata-json:
     with codecs.open(meta_file_out, "w") as fo:
         fo.write(json.dumps(summarydata) + "\n")
         fo.write(json.dumps(errors) + "\n")
+        fo.write(json.dumps(users) + "\n")
     return summarydata, users, errors
 
 def summary(tag, summary):
@@ -167,6 +200,3 @@ def checkusercontribs(elem, users):
 
 if __name__ == "__main__":
     sums, errors, users = process_map(DATA)
-    pprint.pprint(sums)
-    pprint.pprint(errors)
-    pprint.pprint(users)
